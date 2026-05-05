@@ -1,0 +1,24 @@
+{
+  "overview": "SubjectScore is a professional email subject line analyzer for TIGOY.com that scores subject lines in real-time across spam risk, readability, and engagement potential, helping email marketers craft high-deliverability subject lines.",
+  "features": [
+    "Real-time scoring engine with spam detection, power word recognition, and length optimization",
+    "SVG speedometer gauge animating from red to green as score improves",
+    "Word heatmap highlighting spam words (red), long words (yellow), power words (green)",
+    "Live inbox preview mockups for iPhone and Outlook",
+    "AI alternative generator suggesting 3 better subject line versions",
+    "A/B testing simulator comparing two subject lines side-by-side",
+    "History tracking of last 5 tested subject lines via localStorage",
+    "Top and bottom advertisement banners loaded dynamically from external URLs",
+    "Navigation and footer links to partner sites"
+  ],
+  "category": "productivity",
+  "tags": [
+    "email",
+    "marketing",
+    "subject-line",
+    "spam-checker",
+    "productivity",
+    "analytics"
+  ],
+  "last_updated": "2026-05-01T07:29:51.592Z"
+}
