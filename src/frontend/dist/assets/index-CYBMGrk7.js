@@ -19181,6 +19181,7 @@ function detectTone(input) {
   return "Informational";
 }
 function analyzeSubjectLine(input) {
+  var _a2;
   if (!input.trim()) {
     return {
       score: 0,
@@ -19201,9 +19202,7 @@ function analyzeSubjectLine(input) {
   for (const word of SPAM_WORDS) {
     const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const regex = new RegExp(`\\b${escaped}\\b`, "i");
-    if (regex.test(input)) {
-      foundSpam.push(word);
-    }
+    if (regex.test(input)) foundSpam.push(word);
   }
   if (foundSpam.length > 0) {
     const penalty = Math.min(foundSpam.length * 15, 30);
@@ -19244,6 +19243,8 @@ function analyzeSubjectLine(input) {
     });
   }
   const charCount = getCharCount(input);
+  const words = input.split(/\s+/).filter(Boolean);
+  const wordCount = words.length;
   if (charCount > 60) {
     score -= 15;
     feedbackItems.push({
@@ -19262,6 +19263,21 @@ function analyzeSubjectLine(input) {
     });
   }
   const emojiCount = countEmojis(input);
+  const plainTextLen = input.replace(/[\u0080-\uFFFF]/g, "").length;
+  if (plainTextLen < 10 && charCount > 0) {
+    score -= 15;
+    feedbackItems.push({
+      message: "Subject line is too short to convey meaningful information.",
+      type: "error"
+    });
+  }
+  if (charCount >= 30 && charCount <= 50) {
+    score += 5;
+    feedbackItems.push({
+      message: "Good length — fits well in most inboxes.",
+      type: "success"
+    });
+  }
   if (emojiCount > 0) {
     score += 5;
     feedbackItems.push({
@@ -19273,22 +19289,207 @@ function analyzeSubjectLine(input) {
   for (const word of POWER_WORDS) {
     const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const regex = new RegExp(`\\b${escaped}\\b`, "i");
-    if (regex.test(lower)) {
-      foundPower.push(word);
-    }
+    if (regex.test(lower)) foundPower.push(word);
   }
   if (foundPower.length > 0) {
-    score += foundPower.length * 10;
+    const powerBonus = Math.min(foundPower.length * 5, 20);
+    score += powerBonus;
     feedbackItems.push({
       message: `Power words found: ${foundPower.join(", ")} — these boost open rates.`,
       type: "success"
     });
   }
-  const words = input.split(/\s+/).filter(Boolean);
+  const alphaWords = words.map((w) => w.replace(/[^a-zA-Z]/g, "").toLowerCase()).filter((w) => w.length > 0);
+  if (alphaWords.length > 0) {
+    const isGibberish = (w) => {
+      if (w.length <= 2) return false;
+      const hasVowel = /[aeiou]/i.test(w);
+      if (!hasVowel) return true;
+      if (/^(.)\1{2,}$/.test(w)) return true;
+      const codes = Array.from(w).map((c) => c.charCodeAt(0));
+      const isSequential = codes.every(
+        (c, i) => i === 0 || c === codes[i - 1] + 1
+      );
+      if (isSequential && w.length >= 4) return true;
+      return false;
+    };
+    const gibberishWords = alphaWords.filter(isGibberish);
+    const gibberishRatio = gibberishWords.length / alphaWords.length;
+    if (gibberishRatio >= 0.5) {
+      score -= 40;
+      score = Math.min(score, 35);
+      feedbackItems.push({
+        message: "Subject line contains non-words or random characters.",
+        type: "error"
+      });
+    }
+  }
+  if (words.length >= 3) {
+    const uniqueWords = new Set(words.map((w) => w.toLowerCase()));
+    const uniqueRatio = uniqueWords.size / words.length;
+    if (uniqueRatio < 0.5) {
+      score -= 20;
+      feedbackItems.push({
+        message: "Most words are repeated — vary your vocabulary for a stronger subject line.",
+        type: "error"
+      });
+    }
+  }
+  if (input.trim().length > 5 && input === input.toLowerCase() && /^[a-z]/.test(input.trim())) {
+    score -= 10;
+    feedbackItems.push({
+      message: "No capitalization detected — capitalize the first word for a professional appearance.",
+      type: "warning"
+    });
+  }
+  const VAGUE_WORDS = [
+    "update",
+    "info",
+    "fyi",
+    "hey",
+    "hi",
+    "hello",
+    "notice",
+    "reminder",
+    "important",
+    "news",
+    "alert",
+    "message",
+    "follow up",
+    "just checking",
+    "checking in"
+  ];
+  const foundVague = [];
+  for (const vw2 of VAGUE_WORDS) {
+    const escaped = vw2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(`\\b${escaped}\\b`, "i");
+    if (regex.test(lower)) foundVague.push(vw2);
+  }
+  if (foundVague.length > 0) {
+    const vaguePenalty = Math.min(foundVague.length * 15, 30);
+    score -= vaguePenalty;
+    feedbackItems.push({
+      message: "Vague subject line — be more specific about what the reader will find.",
+      type: "warning"
+    });
+  }
+  if (wordCount === 1) {
+    const singleWord = ((_a2 = words[0]) == null ? void 0 : _a2.replace(/[^a-zA-Z]/g, "").toLowerCase()) ?? "";
+    const isPowerWord = foundPower.some(
+      (pw) => pw.toLowerCase() === singleWord
+    );
+    if (!isPowerWord) {
+      score -= 20;
+      score = Math.min(score, 50);
+      feedbackItems.push({
+        message: "Single-word subject lines are too vague — add context to improve clarity.",
+        type: "warning"
+      });
+    }
+  } else if (wordCount <= 3 && wordCount > 1) {
+    const STRONG_ACTION_VERBS = [
+      "get",
+      "learn",
+      "discover",
+      "join",
+      "save",
+      "grab",
+      "try",
+      "start",
+      "unlock",
+      "see",
+      "claim",
+      "buy",
+      "win",
+      "boost"
+    ];
+    const firstWordLower2 = (words[0] ?? "").toLowerCase().replace(/[^a-z]/g, "");
+    const hasActionVerb = STRONG_ACTION_VERBS.includes(firstWordLower2) || foundPower.length > 0;
+    if (!hasActionVerb) {
+      score -= 15;
+      feedbackItems.push({
+        message: "Very short subject line — add more detail to improve clarity and engagement.",
+        type: "warning"
+      });
+    }
+  }
+  const JARGON_PHRASES = [
+    "per our conversation",
+    "going forward",
+    "as per",
+    "touch base",
+    "circle back",
+    "synergy",
+    "leverage",
+    "paradigm",
+    "deliverable",
+    "bandwidth",
+    "deep dive",
+    "boil the ocean",
+    "move the needle",
+    "action item",
+    "thought leadership",
+    "value add",
+    "low hanging fruit"
+  ];
+  const foundJargon = [];
+  for (const phrase of JARGON_PHRASES) {
+    if (lower.includes(phrase)) foundJargon.push(phrase);
+  }
+  if (foundJargon.length > 0) {
+    const jargonPenalty = Math.min(foundJargon.length * 10, 20);
+    score -= jargonPenalty;
+    feedbackItems.push({
+      message: "Avoid corporate jargon — use plain, direct language instead.",
+      type: "warning"
+    });
+  }
+  const ENGAGEMENT_VERBS = [
+    "get",
+    "learn",
+    "discover",
+    "join",
+    "save",
+    "grab",
+    "try",
+    "start",
+    "unlock",
+    "see"
+  ];
+  const firstWordLower = (words[0] ?? "").toLowerCase().replace(/[^a-z]/g, "");
+  if (ENGAGEMENT_VERBS.includes(firstWordLower)) {
+    score += 8;
+    feedbackItems.push({
+      message: "Starts with an action verb — great for engagement.",
+      type: "success"
+    });
+  }
+  if (input.trim().endsWith("?")) {
+    score += 5;
+    feedbackItems.push({
+      message: "Question format creates curiosity — good for engagement.",
+      type: "success"
+    });
+  }
+  if (/\[name\]|\{name\}|\[first\]/i.test(input)) {
+    score += 5;
+    feedbackItems.push({
+      message: "Personalization token detected — personalized subject lines improve open rates.",
+      type: "success"
+    });
+  }
+  if (/\d+%|\d+\s*(tips|ways|reasons|steps|tricks|ideas|facts|secrets|examples)/i.test(
+    input
+  ) || /^\d+\s/i.test(input.trim())) {
+    score += 8;
+    feedbackItems.push({
+      message: "Includes a number — subject lines with stats tend to perform better.",
+      type: "success"
+    });
+  }
   const longWords = words.filter(
     (w) => w.replace(/[^a-zA-Z]/g, "").length > 10
   );
-  const wordCount = words.length;
   score = Math.max(0, Math.min(100, score));
   const tone = detectTone(input);
   return {
@@ -27372,110 +27573,137 @@ const featureBundle = {
   ...layout
 };
 const motion = /* @__PURE__ */ createMotionProxy(featureBundle, createDomVisualElement);
-function ScoringGauge({ score }) {
-  const radius = 70;
-  const cx = 90;
-  const cy = 90;
-  const startAngle = 210;
-  const endAngle = 330;
-  const totalArc = 360 - startAngle + endAngle;
+function ScoringGauge({ score, isEmpty }) {
+  const R = 70;
+  const cx = 100;
+  const cy = 100;
+  const arcLength = Math.PI * R;
+  const bgPath = `M ${cx - R} ${cy} A ${R} ${R} 0 0 1 ${cx + R} ${cy}`;
   const fraction = score / 100;
-  const currentArc = fraction * totalArc;
-  function polarToCart(cx2, cy2, r, deg) {
-    const rad = (deg - 90) * Math.PI / 180;
-    return { x: cx2 + r * Math.cos(rad), y: cy2 + r * Math.sin(rad) };
-  }
-  function arcPath(startDeg, endDeg, r) {
-    const s = polarToCart(cx, cy, r, startDeg);
-    const e = polarToCart(cx, cy, r, endDeg);
-    const large = endDeg - startDeg > 180 ? 1 : 0;
-    return `M ${s.x} ${s.y} A ${r} ${r} 0 ${large} 1 ${e.x} ${e.y}`;
-  }
-  const needleDeg = startAngle + fraction * totalArc;
-  const needleTip = polarToCart(cx, cy, radius - 8, needleDeg);
-  const needleBase1 = polarToCart(cx, cy, 12, needleDeg + 90);
-  const needleBase2 = polarToCart(cx, cy, 12, needleDeg - 90);
-  const gaugeColor = score >= 67 ? "#10b981" : score >= 34 ? "#f59e0b" : "#ef4444";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "svg",
-    {
-      viewBox: "0 0 180 120",
-      className: "w-full max-w-[200px] mx-auto",
-      role: "img",
-      "aria-label": `Score gauge: ${score} out of 100`,
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("title", { children: [
-          "Score gauge: ",
-          score,
-          " out of 100"
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "path",
-          {
-            d: arcPath(startAngle, startAngle + totalArc, radius),
-            fill: "none",
-            stroke: "#e2e8f0",
-            strokeWidth: "12",
-            strokeLinecap: "round"
-          }
-        ),
-        score > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "path",
-          {
-            d: arcPath(startAngle, startAngle + currentArc, radius),
-            fill: "none",
-            stroke: gaugeColor,
-            strokeWidth: "12",
-            strokeLinecap: "round"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "polygon",
-          {
-            points: `${needleTip.x},${needleTip.y} ${needleBase1.x},${needleBase1.y} ${needleBase2.x},${needleBase2.y}`,
-            fill: gaugeColor,
-            opacity: "0.9"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx, cy, r: "6", fill: gaugeColor }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "text",
-          {
-            x: cx,
-            y: cy + 20,
-            textAnchor: "middle",
-            fontSize: "22",
-            fontWeight: "800",
-            fill: gaugeColor,
-            children: score
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "text",
-          {
-            x: cx,
-            y: cy + 32,
-            textAnchor: "middle",
-            fontSize: "7",
-            fill: "#94a3b8",
-            fontWeight: "600",
-            children: "/ 100"
-          }
-        )
-      ]
-    }
-  );
-}
-function ScoreLabel({ score }) {
-  if (score === 0)
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-muted-foreground text-xs font-semibold", children: "No Input" });
-  if (score >= 80)
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-emerald-600 text-xs font-semibold uppercase tracking-wider", children: "Excellent" });
-  if (score >= 67)
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-emerald-500 text-xs font-semibold uppercase tracking-wider", children: "Good" });
-  if (score >= 34)
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-amber-500 text-xs font-semibold uppercase tracking-wider", children: "Average" });
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-rose-500 text-xs font-semibold uppercase tracking-wider", children: "Poor" });
+  const dashOffset = arcLength * (1 - fraction);
+  const needleDeg = -180 + fraction * 180;
+  const needleLength = 52;
+  const scoreColor = score > 66 ? "#10b981" : score > 33 ? "#f59e0b" : "#f43f5e";
+  const scoreLabel = isEmpty ? "No Input" : score >= 80 ? "Excellent" : score >= 67 ? "Good" : score >= 34 ? "Average" : "Poor";
+  const labelColor = isEmpty ? "text-muted-foreground" : score >= 67 ? "text-emerald-600" : score >= 34 ? "text-amber-500" : "text-rose-500";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "svg",
+      {
+        viewBox: "0 0 200 115",
+        className: "w-full max-w-[200px]",
+        role: "img",
+        "aria-label": `Score gauge: ${isEmpty ? "No input" : `${score} out of 100`}`,
+        children: [
+          [0, 25, 50, 75, 100].map((pct) => {
+            const a = Math.PI * (1 - pct / 100);
+            const inner = {
+              x: cx + (R - 10) * Math.cos(a),
+              y: cy - (R - 10) * Math.sin(a)
+            };
+            const outer = {
+              x: cx + (R + 2) * Math.cos(a),
+              y: cy - (R + 2) * Math.sin(a)
+            };
+            const labelPos = {
+              x: cx + (R - 20) * Math.cos(a),
+              y: cy - (R - 20) * Math.sin(a)
+            };
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "line",
+                {
+                  x1: inner.x,
+                  y1: inner.y,
+                  x2: outer.x,
+                  y2: outer.y,
+                  stroke: "#cbd5e1",
+                  strokeWidth: "1.5"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "text",
+                {
+                  x: labelPos.x,
+                  y: labelPos.y + 2,
+                  textAnchor: "middle",
+                  fontSize: "7",
+                  fill: "#94a3b8",
+                  fontFamily: "sans-serif",
+                  children: pct
+                }
+              )
+            ] }, pct);
+          }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "path",
+            {
+              d: bgPath,
+              fill: "none",
+              stroke: "#e2e8f0",
+              strokeWidth: "10",
+              strokeLinecap: "round"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "path",
+            {
+              d: bgPath,
+              fill: "none",
+              stroke: isEmpty ? "#e2e8f0" : scoreColor,
+              strokeWidth: "10",
+              strokeLinecap: "round",
+              strokeDasharray: arcLength,
+              strokeDashoffset: isEmpty || score === 0 ? arcLength : dashOffset,
+              style: {
+                transition: "stroke-dashoffset 0.5s ease-out, stroke 0.4s ease"
+              }
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx, cy, r: "5", fill: isEmpty ? "#94a3b8" : "#475569" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "g",
+            {
+              style: { transition: "transform 0.5s ease-out" },
+              transform: `rotate(${isEmpty ? -180 : needleDeg}, ${cx}, ${cy})`,
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "line",
+                {
+                  x1: cx,
+                  y1: cy,
+                  x2: cx + needleLength,
+                  y2: cy,
+                  stroke: isEmpty ? "#94a3b8" : "#334155",
+                  strokeWidth: "2.5",
+                  strokeLinecap: "round"
+                }
+              )
+            }
+          )
+        ]
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      motion.div,
+      {
+        initial: { scale: 0.85, opacity: 0.5 },
+        animate: { scale: 1, opacity: 1 },
+        transition: { duration: 0.3 },
+        className: "text-4xl font-black leading-none mt-1",
+        style: { color: isEmpty ? void 0 : scoreColor },
+        children: isEmpty ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-2xl font-bold text-muted-foreground", children: "--" }) : score
+      },
+      isEmpty ? "empty" : score
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-xs text-muted-foreground mt-0.5 mb-1 font-medium", children: "/ 100" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: `text-xs font-bold uppercase tracking-widest ${labelColor}`,
+        children: scoreLabel
+      }
+    )
+  ] });
 }
 function FeedbackBadge({ type }) {
   if (type === "error")
@@ -27497,10 +27725,12 @@ function SubjectPanel({
   result,
   isWinner
 }) {
+  const isEmpty = value.trim() === "";
+  const panelKey = label === "Subject Line A" ? "a" : "b";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
     {
-      "data-ocid": `abtest.panel.${label === "Subject Line A" ? "a" : "b"}`,
+      "data-ocid": `abtest.panel.${panelKey}`,
       className: `bg-card rounded-2xl border p-6 flex flex-col gap-4 transition-all duration-300 ${isWinner === true ? "border-emerald-400 shadow-md shadow-emerald-100" : isWinner === false ? "border-border opacity-75" : "border-border shadow-sm"}`,
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between", children: [
@@ -27514,7 +27744,7 @@ function SubjectPanel({
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "textarea",
             {
-              "data-ocid": `abtest.input.${label === "Subject Line A" ? "a" : "b"}`,
+              "data-ocid": `abtest.input.${panelKey}`,
               value,
               onChange: (e) => onChange(e.target.value),
               placeholder: `Enter ${label}...`,
@@ -27528,9 +27758,8 @@ function SubjectPanel({
           ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-1", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ScoringGauge, { score: result.score }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ScoreLabel, { score: result.score }),
-          result.tone && result.charCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-muted-foreground mt-0.5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ScoringGauge, { score: result.score, isEmpty }),
+          result.tone && !isEmpty && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-muted-foreground mt-0.5", children: [
             "Tone:",
             " ",
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold text-foreground", children: result.tone })

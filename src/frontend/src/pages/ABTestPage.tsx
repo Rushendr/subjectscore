@@ -8,125 +8,164 @@ interface Props {
   onNavigate: (page: string) => void;
 }
 
-function ScoringGauge({ score }: { score: number }) {
-  const radius = 70;
-  const cx = 90;
-  const cy = 90;
-  const startAngle = 210;
-  const endAngle = 330;
-  const totalArc = 360 - startAngle + endAngle;
+// ─── Scoring Gauge (same reliable technique as AnalyzerPage ScoreGauge) ──────
+
+function ScoringGauge({ score, isEmpty }: { score: number; isEmpty: boolean }) {
+  // Semicircle: center (100,100), radius 70, left (180°) → right (0°)
+  // stroke-dasharray/dashoffset drives fill — matches AnalyzerPage ScoreGauge
+  const R = 70;
+  const cx = 100;
+  const cy = 100;
+  const arcLength = Math.PI * R; // ≈ 219.9
+
+  const bgPath = `M ${cx - R} ${cy} A ${R} ${R} 0 0 1 ${cx + R} ${cy}`;
+
   const fraction = score / 100;
-  const currentArc = fraction * totalArc;
+  const dashOffset = arcLength * (1 - fraction);
 
-  function polarToCart(cx: number, cy: number, r: number, deg: number) {
-    const rad = ((deg - 90) * Math.PI) / 180;
-    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
-  }
+  // Needle: −180deg (left/score=0) → 0deg (right/score=100)
+  const needleDeg = -180 + fraction * 180;
+  const needleLength = 52;
 
-  function arcPath(startDeg: number, endDeg: number, r: number) {
-    const s = polarToCart(cx, cy, r, startDeg);
-    const e = polarToCart(cx, cy, r, endDeg);
-    const large = endDeg - startDeg > 180 ? 1 : 0;
-    return `M ${s.x} ${s.y} A ${r} ${r} 0 ${large} 1 ${e.x} ${e.y}`;
-  }
+  const scoreColor =
+    score > 66 ? "#10b981" : score > 33 ? "#f59e0b" : "#f43f5e";
 
-  const needleDeg = startAngle + fraction * totalArc;
-  const needleTip = polarToCart(cx, cy, radius - 8, needleDeg);
-  const needleBase1 = polarToCart(cx, cy, 12, needleDeg + 90);
-  const needleBase2 = polarToCart(cx, cy, 12, needleDeg - 90);
+  const scoreLabel = isEmpty
+    ? "No Input"
+    : score >= 80
+      ? "Excellent"
+      : score >= 67
+        ? "Good"
+        : score >= 34
+          ? "Average"
+          : "Poor";
 
-  const gaugeColor =
-    score >= 67 ? "#10b981" : score >= 34 ? "#f59e0b" : "#ef4444";
+  const labelColor = isEmpty
+    ? "text-muted-foreground"
+    : score >= 67
+      ? "text-emerald-600"
+      : score >= 34
+        ? "text-amber-500"
+        : "text-rose-500";
 
   return (
-    <svg
-      viewBox="0 0 180 120"
-      className="w-full max-w-[200px] mx-auto"
-      role="img"
-      aria-label={`Score gauge: ${score} out of 100`}
-    >
-      <title>Score gauge: {score} out of 100</title>
-      {/* Track */}
-      <path
-        d={arcPath(startAngle, startAngle + totalArc, radius)}
-        fill="none"
-        stroke="#e2e8f0"
-        strokeWidth="12"
-        strokeLinecap="round"
-      />
-      {/* Filled arc */}
-      {score > 0 && (
+    <div className="flex flex-col items-center">
+      <svg
+        viewBox="0 0 200 115"
+        className="w-full max-w-[200px]"
+        role="img"
+        aria-label={`Score gauge: ${isEmpty ? "No input" : `${score} out of 100`}`}
+      >
+        {/* Tick marks at 0, 25, 50, 75, 100 */}
+        {[0, 25, 50, 75, 100].map((pct) => {
+          const a = Math.PI * (1 - pct / 100);
+          const inner = {
+            x: cx + (R - 10) * Math.cos(a),
+            y: cy - (R - 10) * Math.sin(a),
+          };
+          const outer = {
+            x: cx + (R + 2) * Math.cos(a),
+            y: cy - (R + 2) * Math.sin(a),
+          };
+          const labelPos = {
+            x: cx + (R - 20) * Math.cos(a),
+            y: cy - (R - 20) * Math.sin(a),
+          };
+          return (
+            <g key={pct}>
+              <line
+                x1={inner.x}
+                y1={inner.y}
+                x2={outer.x}
+                y2={outer.y}
+                stroke="#cbd5e1"
+                strokeWidth="1.5"
+              />
+              <text
+                x={labelPos.x}
+                y={labelPos.y + 2}
+                textAnchor="middle"
+                fontSize="7"
+                fill="#94a3b8"
+                fontFamily="sans-serif"
+              >
+                {pct}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Background arc */}
         <path
-          d={arcPath(startAngle, startAngle + currentArc, radius)}
+          d={bgPath}
           fill="none"
-          stroke={gaugeColor}
-          strokeWidth="12"
+          stroke="#e2e8f0"
+          strokeWidth="10"
           strokeLinecap="round"
         />
-      )}
-      {/* Needle */}
-      <polygon
-        points={`${needleTip.x},${needleTip.y} ${needleBase1.x},${needleBase1.y} ${needleBase2.x},${needleBase2.y}`}
-        fill={gaugeColor}
-        opacity="0.9"
-      />
-      <circle cx={cx} cy={cy} r="6" fill={gaugeColor} />
-      {/* Score text */}
-      <text
-        x={cx}
-        y={cy + 20}
-        textAnchor="middle"
-        fontSize="22"
-        fontWeight="800"
-        fill={gaugeColor}
+
+        {/* Foreground arc — dashoffset drives animated progress */}
+        <path
+          d={bgPath}
+          fill="none"
+          stroke={isEmpty ? "#e2e8f0" : scoreColor}
+          strokeWidth="10"
+          strokeLinecap="round"
+          strokeDasharray={arcLength}
+          strokeDashoffset={isEmpty || score === 0 ? arcLength : dashOffset}
+          style={{
+            transition: "stroke-dashoffset 0.5s ease-out, stroke 0.4s ease",
+          }}
+        />
+
+        {/* Needle base circle */}
+        <circle cx={cx} cy={cy} r="5" fill={isEmpty ? "#94a3b8" : "#475569"} />
+
+        {/* Needle — rotates around center pivot */}
+        <g
+          style={{ transition: "transform 0.5s ease-out" }}
+          transform={`rotate(${isEmpty ? -180 : needleDeg}, ${cx}, ${cy})`}
+        >
+          <line
+            x1={cx}
+            y1={cy}
+            x2={cx + needleLength}
+            y2={cy}
+            stroke={isEmpty ? "#94a3b8" : "#334155"}
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          />
+        </g>
+      </svg>
+
+      {/* Score number */}
+      <motion.div
+        key={isEmpty ? "empty" : score}
+        initial={{ scale: 0.85, opacity: 0.5 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.3 }}
+        className="text-4xl font-black leading-none mt-1"
+        style={{ color: isEmpty ? undefined : scoreColor }}
       >
-        {score}
-      </text>
-      <text
-        x={cx}
-        y={cy + 32}
-        textAnchor="middle"
-        fontSize="7"
-        fill="#94a3b8"
-        fontWeight="600"
+        {isEmpty ? (
+          <span className="text-2xl font-bold text-muted-foreground">--</span>
+        ) : (
+          score
+        )}
+      </motion.div>
+      <div className="text-xs text-muted-foreground mt-0.5 mb-1 font-medium">
+        /&nbsp;100
+      </div>
+      <div
+        className={`text-xs font-bold uppercase tracking-widest ${labelColor}`}
       >
-        / 100
-      </text>
-    </svg>
+        {scoreLabel}
+      </div>
+    </div>
   );
 }
 
-function ScoreLabel({ score }: { score: number }) {
-  if (score === 0)
-    return (
-      <span className="text-muted-foreground text-xs font-semibold">
-        No Input
-      </span>
-    );
-  if (score >= 80)
-    return (
-      <span className="text-emerald-600 text-xs font-semibold uppercase tracking-wider">
-        Excellent
-      </span>
-    );
-  if (score >= 67)
-    return (
-      <span className="text-emerald-500 text-xs font-semibold uppercase tracking-wider">
-        Good
-      </span>
-    );
-  if (score >= 34)
-    return (
-      <span className="text-amber-500 text-xs font-semibold uppercase tracking-wider">
-        Average
-      </span>
-    );
-  return (
-    <span className="text-rose-500 text-xs font-semibold uppercase tracking-wider">
-      Poor
-    </span>
-  );
-}
+// ─── Feedback badge dot ───────────────────────────────────────────────────────
 
 function FeedbackBadge({ type }: { type: "error" | "warning" | "success" }) {
   if (type === "error")
@@ -145,6 +184,8 @@ function FeedbackBadge({ type }: { type: "error" | "warning" | "success" }) {
   );
 }
 
+// ─── Subject Panel ────────────────────────────────────────────────────────────
+
 interface SubjectPanelProps {
   label: string;
   value: string;
@@ -160,9 +201,12 @@ function SubjectPanel({
   result,
   isWinner,
 }: SubjectPanelProps) {
+  const isEmpty = value.trim() === "";
+  const panelKey = label === "Subject Line A" ? "a" : "b";
+
   return (
     <div
-      data-ocid={`abtest.panel.${label === "Subject Line A" ? "a" : "b"}`}
+      data-ocid={`abtest.panel.${panelKey}`}
       className={`bg-card rounded-2xl border p-6 flex flex-col gap-4 transition-all duration-300 ${
         isWinner === true
           ? "border-emerald-400 shadow-md shadow-emerald-100"
@@ -182,7 +226,7 @@ function SubjectPanel({
 
       <div className="relative">
         <textarea
-          data-ocid={`abtest.input.${label === "Subject Line A" ? "a" : "b"}`}
+          data-ocid={`abtest.input.${panelKey}`}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={`Enter ${label}...`}
@@ -194,10 +238,10 @@ function SubjectPanel({
         </span>
       </div>
 
+      {/* Score gauge — passes isEmpty so meter shows placeholder when blank */}
       <div className="flex flex-col items-center gap-1">
-        <ScoringGauge score={result.score} />
-        <ScoreLabel score={result.score} />
-        {result.tone && result.charCount > 0 && (
+        <ScoringGauge score={result.score} isEmpty={isEmpty} />
+        {result.tone && !isEmpty && (
           <span className="text-xs text-muted-foreground mt-0.5">
             Tone:{" "}
             <span className="font-semibold text-foreground">{result.tone}</span>
@@ -221,6 +265,8 @@ function SubjectPanel({
     </div>
   );
 }
+
+// ─── ABTestPage ───────────────────────────────────────────────────────────────
 
 export default function ABTestPage({ onNavigate }: Props) {
   const [subjectA, setSubjectA] = useState("");

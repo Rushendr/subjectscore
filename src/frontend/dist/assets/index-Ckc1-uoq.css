@@ -1832,6 +1832,10 @@ video {
   font-size: 1.5rem;
   line-height: 2rem;
 }
+.text-4xl {
+  font-size: 2.25rem;
+  line-height: 2.5rem;
+}
 .text-6xl {
   font-size: 3.75rem;
   line-height: 1;
@@ -1879,6 +1883,9 @@ video {
 .uppercase {
   text-transform: uppercase;
 }
+.capitalize {
+  text-transform: capitalize;
+}
 .tabular-nums {
   --tw-numeric-spacing: tabular-nums;
   font-variant-numeric: var(--tw-ordinal) var(--tw-slashed-zero) var(--tw-numeric-figure) var(--tw-numeric-spacing) var(--tw-numeric-fraction);
@@ -1894,9 +1901,6 @@ video {
 }
 .tracking-tight {
   letter-spacing: -0.025em;
-}
-.tracking-wider {
-  letter-spacing: 0.05em;
 }
 .tracking-widest {
   letter-spacing: 0.1em;
